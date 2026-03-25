@@ -9,6 +9,8 @@
   "categories": [
     "Other"
   ],
+  "repository": "https://github.com/raldone01/Copy-Files-to-Clipboard",
+  "publisher": "raldone01",
   "activationEvents": [],
   "main": "./out/extension.js",
   "contributes": {
