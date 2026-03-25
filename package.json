@@ -1,0 +1,128 @@
+{
+  "name": "copy-files-to-clipboard",
+  "displayName": "Copy Files to Clipboard",
+  "description": "Copies files to clipboard for prompting or sharing.",
+  "version": "1.0.0",
+  "engines": {
+    "vscode": "^1.110.0"
+  },
+  "categories": [
+    "Other"
+  ],
+  "activationEvents": [],
+  "main": "./out/extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "copy-files-to-clipboard.copyContents",
+        "title": "Copy File Contents to Clipboard"
+      }
+    ],
+    "menus": {
+      "explorer/context": [
+        {
+          "command": "copy-files-to-clipboard.copyContents",
+          "group": "navigation"
+        }
+      ]
+    },
+    "configuration": {
+      "title": "Copy Files to Clipboard",
+      "properties": {
+        "copyFilesToClipboard.maxFileSizeMB": {
+          "type": "number",
+          "default": 2,
+          "description": "Maximum size (in MB) of a single file to process."
+        },
+        "copyFilesToClipboard.maxTotalSizeMB": {
+          "type": "number",
+          "default": 10,
+          "description": "Maximum total size (in MB) of all files copied to the clipboard."
+        },
+        "copyFilesToClipboard.maxTotalFiles": {
+          "type": "number",
+          "default": 200,
+          "description": "Maximum number of files to process at once."
+        },
+        "copyFilesToClipboard.maxDirDepth": {
+          "type": "number",
+          "default": 15,
+          "description": "Maximum folder recursion depth."
+        },
+        "copyFilesToClipboard.ignoreDirs": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": [
+            ".git",
+            "node_modules",
+            "dist",
+            "build",
+            ".vscode",
+            ".idea"
+          ],
+          "description": "Directories to completely ignore."
+        },
+        "copyFilesToClipboard.sensitiveFileNames": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": [
+            ".env",
+            "secrets.json",
+            "credentials.json",
+            "id_rsa",
+            "id_dsa",
+            "id_ecdsa",
+            "id_ed25519"
+          ],
+          "description": "Exact file names to ignore for security."
+        },
+        "copyFilesToClipboard.sensitiveFilePrefixes": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": [
+            ".env."
+          ],
+          "description": "File prefixes to ignore (e.g., '.env.' matches '.env.local')."
+        },
+        "copyFilesToClipboard.sensitiveFileExtensions": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": [
+            ".pem",
+            ".key",
+            ".cert",
+            ".p12",
+            ".pfx"
+          ],
+          "description": "File extensions to ignore for security."
+        }
+      }
+    }
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run compile",
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./",
+    "pretest": "npm run compile && npm run lint",
+    "lint": "eslint src",
+    "test": "vscode-test"
+  },
+  "devDependencies": {
+    "@types/vscode": "^1.110.0",
+    "@types/mocha": "^10.0.10",
+    "@types/node": "22.x",
+    "typescript-eslint": "^8.56.1",
+    "eslint": "^9.39.3",
+    "typescript": "^5.9.3",
+    "@vscode/test-cli": "^0.0.12",
+    "@vscode/test-electron": "^2.5.2"
+  }
+}
