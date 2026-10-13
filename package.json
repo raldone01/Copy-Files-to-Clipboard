@@ -105,6 +105,14 @@
             ".pfx"
           ],
           "description": "File extensions to ignore for security."
+        },
+        "copyFilesToClipboard.markdownTagOverrides": {
+          "type": "object",
+          "default": {},
+          "markdownDescription": "Overrides for the markdown fence tag. Keys are VS Code language IDs, values are the tag to emit. Example: `{\"shellscript\": \"bash\", \"jsonc\": \"json5\"}`",
+          "additionalProperties": {
+            "type": "string"
+          }
         }
       }
     }

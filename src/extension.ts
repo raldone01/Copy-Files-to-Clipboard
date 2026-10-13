@@ -12,6 +12,7 @@ interface ExtensionConfig {
 	sensitiveFileNames: Set<string>;
 	sensitiveFilePrefixes: string[];
 	sensitiveFileExtensions: string[];
+	markdownTagOverrides: Record<string, string>;
 }
 
 interface GatherState {
@@ -24,6 +25,19 @@ interface GatherState {
 	// Tracks processed paths to prevent duplicate gathering
 	processedPaths: Set<string>;
 }
+
+/**
+ * VS Code language IDs that don't work well as markdown fence tags in
+ * common renderers (GitHub, Chroma, highlight.js, Prism, ...).
+ * Everything else can be used as-is, and users can add more via settings.
+ */
+const FENCE_TAG_OVERRIDES: Record<string, string> = {
+	'shellscript': 'shell',        // .sh/.bash/.zsh — "shellscript" is VS Code-specific
+	'javascriptreact': 'jsx',
+	'typescriptreact': 'tsx',
+	'jsonc': 'json',               // "jsonc" is poorly supported, "json" renders everywhere
+	'cuda-cpp': 'cuda',            // .cu/.cuh from the NVIDIA CUDA extension
+};
 
 /**
  * Retrieves the current configuration from VS Code workspace settings.
@@ -39,6 +53,9 @@ function getConfig(): ExtensionConfig {
 	const ignoreDirsArray = config.get<string[]>('ignoreDirs', []);
 	const sensitiveNamesArray = config.get<string[]>('sensitiveFileNames', []);
 
+	// Normalize override keys so lookups are case-insensitive
+	const rawTagOverrides = config.get<Record<string, string>>('markdownTagOverrides', {});
+
 	return {
 		maxFileSizeBytes: maxFileSizeMB * 1024 * 1024,
 		maxTotalSizeBytes: maxTotalSizeMB * 1024 * 1024,
@@ -48,7 +65,10 @@ function getConfig(): ExtensionConfig {
 		sensitiveFileNames: new Set(sensitiveNamesArray),
 		sensitiveFilePrefixes: config.get<string[]>('sensitiveFilePrefixes', ['.env.']),
 		sensitiveFileExtensions: config.get<string[]>('sensitiveFileExtensions', ['.pem', '.key', '.cert'])
-			.map(ext => ext.startsWith('.') ? ext : `.${ext}`)
+			.map(ext => ext.startsWith('.') ? ext : `.${ext}`),
+		markdownTagOverrides: Object.fromEntries(
+			Object.entries(rawTagOverrides).map(([k, v]) => [k.toLowerCase(), v])
+		)
 	};
 }
 
@@ -103,12 +123,15 @@ export function activate(context: vscode.ExtensionContext) {
 					return;
 				}
 
-				// Format the files, checking for binary content
+				// Caches fence-tag lookups so the language is only resolved
+				// once per file extension, not once per file.
+				const fenceTagCache = new Map<string, string>();
+
 				let finalOutput = '';
 				let processedCount = 0;
 
 				for (const fileUri of state.files) {
-					const formattedContent = await formatFileContent(fileUri);
+					const formattedContent = await formatFileContent(fileUri, currentConfig, fenceTagCache);
 					if (formattedContent) {
 						finalOutput += formattedContent;
 						processedCount++;
@@ -221,9 +244,13 @@ async function gatherAllFiles(uris: vscode.Uri[], state: GatherState): Promise<v
  * Reads a file, checks if it's binary, and formats it.
  * Returns null if the file is binary.
  */
-async function formatFileContent(uri: vscode.Uri): Promise<string | null> {
+async function formatFileContent(
+	uri: vscode.Uri,
+	config: ExtensionConfig,
+	fenceTagCache: Map<string, string>
+): Promise<string | null> {
 	const relativePath = vscode.workspace.asRelativePath(uri, false);
-	const fileExtension = path.extname(uri.fsPath).replace('.', '');
+	const fileExtension = path.extname(uri.fsPath); // kept with the dot for cache keys
 
 	const fileData = await vscode.workspace.fs.readFile(uri);
 
@@ -234,17 +261,75 @@ async function formatFileContent(uri: vscode.Uri): Promise<string | null> {
 
 	const content = new TextDecoder('utf-8').decode(fileData);
 
+	// Ask VS Code for the proper language tag ("rust", "python", ...).
+	// Only falls back to the raw extension if VS Code doesn't know the file.
+	const fenceTag = await resolveFenceTag(uri, fileExtension, config, fenceTagCache);
+
 	// Find the longest sequence of backticks in the file
 	const backtickMatches = content.match(/`{3,}/g);
 	const maxBackticks = backtickMatches ? Math.max(...backtickMatches.map(m => m.length)) : 2;
 	const fence = '`'.repeat(maxBackticks + 1); // Use at least 3, or one more than the max found
 
 	let formattedStr = `### \`${relativePath}\`\n`;
-	formattedStr += `${fence}${fileExtension}\n`;
+	formattedStr += `${fence}${fenceTag}\n`;
 	formattedStr += `${content}\n`;
 	formattedStr += `${fence}\n\n`;
 
 	return formattedStr;
+}
+
+/**
+* Determines the markdown fence tag for a file.
+*
+* Instead of guessing from the file extension (which yields tags like "rs"
+* or "yml"), this opens the document and uses its resolved language ID —
+* the same identifier VS Code's markdown preview uses for fence
+* highlighting, and a valid tag in GitHub & most renderers.
+*/
+async function resolveFenceTag(
+	uri: vscode.Uri,
+	fileExtension: string,
+	config: ExtensionConfig,
+	cache: Map<string, string>
+): Promise<string> {
+	const extKey = fileExtension.toLowerCase();
+
+	if (cache.has(extKey)) {
+		return cache.get(extKey)!;
+	}
+
+	let tag: string;
+
+	try {
+		// Does NOT open an editor — VS Code just resolves the language
+		// (built-in + installed grammars, files.associations, shebangs).
+		const doc = await vscode.workspace.openTextDocument(uri);
+		const languageId = doc.languageId.toLowerCase();
+
+		// User settings win, then the built-in correction table,
+		// then the language ID itself.
+		const override = config.markdownTagOverrides[languageId] ?? FENCE_TAG_OVERRIDES[languageId];
+
+		if (override) {
+			tag = override;
+		} else if (languageId && languageId !== 'plaintext') {
+			tag = languageId;
+		} else {
+			// Unknown type: keep the old behavior and use the raw extension
+			tag = fileExtension.replace('.', '').toLowerCase() || 'text';
+		}
+	} catch {
+		// File couldn't be opened as text: keep the old behavior
+		tag = fileExtension.replace('.', '').toLowerCase() || 'text';
+	}
+
+	// Extensionless files (Makefile, LICENSE, scripts) can each resolve
+	// differently, so only cache for real extensions.
+	if (extKey) {
+		cache.set(extKey, tag);
+	}
+
+	return tag;
 }
 
 /**
