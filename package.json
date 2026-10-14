@@ -2,7 +2,7 @@
   "name": "copy-files-to-clipboard",
   "displayName": "Copy Files to Clipboard",
   "description": "Copies files to clipboard for prompting or sharing.",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "engines": {
     "vscode": "^1.110.0"
   },
@@ -135,7 +135,7 @@
     "@types/mocha": "^10.0.10",
     "@types/node": "^22.20.1",
     "@types/vscode": "^1.110.0",
-    "@vscode/test-cli": "^0.0.12",
+    "@vscode/test-cli": "^0.0.11",
     "@vscode/test-electron": "^2.5.2",
     "eslint": "^9.39.3",
     "typescript": "^5.9.3",
