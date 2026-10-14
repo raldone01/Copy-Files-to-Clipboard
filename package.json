@@ -26,6 +26,12 @@
           "command": "copy-files-to-clipboard.copyContents",
           "group": "navigation"
         }
+      ],
+      "editor/title/context": [
+        {
+          "command": "copy-files-to-clipboard.copyContents",
+          "group": "navigation"
+        }
       ]
     },
     "configuration": {

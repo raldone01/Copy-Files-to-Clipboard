@@ -75,22 +75,34 @@ function getConfig(): ExtensionConfig {
 export function activate(context: vscode.ExtensionContext) {
 	let disposable = vscode.commands.registerCommand(
 		'copy-files-to-clipboard.copyContents',
-		async (uri: vscode.Uri, selectedUris: vscode.Uri[]) => {
+		async (uri: vscode.Uri | vscode.Uri[], selectedUris?: vscode.Uri[]) => {
 
-			// Determine which files/folders to process based on selection behavior
+			// Different menu contributions pass different shapes:
+			//   - Explorer context:  (clickedUri, [selectedUris, ...])
+			//   - Editor tab context: (tabUri)  — a single URI today, but we
+			//     accept arrays in case VS Code later exposes multi-selected
+			//     tabs to extensions.
+			// Normalize both arguments to arrays up front.
+			const primaryUris = Array.isArray(uri) ? uri : (uri ? [uri] : []);
+			const selectionUris = Array.isArray(selectedUris) ? selectedUris : [];
+
+			// Determine which files/folders to process.
 			let urisToProcess: vscode.Uri[] = [];
 
-			if (uri && selectedUris && selectedUris.length > 0) {
-				// Check if the item we right-clicked is part of the current multi-selection
-				const isIncluded = selectedUris.some(u => u.fsPath === uri.fsPath);
-
-				// If right-clicked inside selection, copy everything selected.
-				// If right-clicked outside selection, copy only the right-clicked item.
-				urisToProcess = isIncluded ? selectedUris : [uri];
-			} else if (selectedUris && selectedUris.length > 0) {
-				urisToProcess = selectedUris;
-			} else if (uri) {
-				urisToProcess = [uri];
+			if (primaryUris.length > 0 && selectionUris.length > 0) {
+				// Right-clicked item is part of the explorer multi-selection?
+				// If so, copy the whole selection. Otherwise, just the item
+				// that was right-clicked (matches original behaviour).
+				const clickedIsInSelection = primaryUris.some(p =>
+					selectionUris.some(s => s.fsPath === p.fsPath)
+				);
+				urisToProcess = clickedIsInSelection ? selectionUris : primaryUris;
+			} else if (selectionUris.length > 0) {
+				// Called with only a selection (no primary).
+				urisToProcess = selectionUris;
+			} else if (primaryUris.length > 0) {
+				// Tab-bar context menu, or explorer right-click of a lone item.
+				urisToProcess = primaryUris;
 			}
 
 			if (urisToProcess.length === 0) {
